@@ -1,0 +1,22 @@
+{
+  "name": "StreetLegends.Bootstrap",
+  "rootNamespace": "StreetLegends.Bootstrap",
+  "references": [
+    "StreetLegends.Core",
+    "StreetLegends.Data",
+    "StreetLegends.Services",
+    "StreetLegends.Services.Local",
+    "StreetLegends.Meta",
+    "StreetLegends.Gameplay",
+    "StreetLegends.Presentation"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

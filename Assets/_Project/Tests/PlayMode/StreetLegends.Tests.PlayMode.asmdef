@@ -1,0 +1,26 @@
+{
+  "name": "StreetLegends.Tests.PlayMode",
+  "rootNamespace": "StreetLegends.Tests.PlayMode",
+  "references": [
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "StreetLegends.Core",
+    "StreetLegends.Data",
+    "StreetLegends.Services",
+    "StreetLegends.Meta",
+    "StreetLegends.Gameplay"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

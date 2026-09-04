@@ -1,0 +1,21 @@
+{
+  "name": "StreetLegends.Presentation",
+  "rootNamespace": "StreetLegends.Presentation",
+  "references": [
+    "StreetLegends.Core",
+    "StreetLegends.Data",
+    "StreetLegends.Services",
+    "StreetLegends.Meta",
+    "StreetLegends.Gameplay",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -1,0 +1,17 @@
+{
+  "name": "StreetLegends.Services",
+  "rootNamespace": "StreetLegends.Services",
+  "references": [
+    "StreetLegends.Core",
+    "StreetLegends.Data"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

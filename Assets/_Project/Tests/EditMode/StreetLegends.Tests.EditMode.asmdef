@@ -1,0 +1,28 @@
+{
+  "name": "StreetLegends.Tests.EditMode",
+  "rootNamespace": "StreetLegends.Tests.EditMode",
+  "references": [
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "StreetLegends.Core",
+    "StreetLegends.Data",
+    "StreetLegends.Services",
+    "StreetLegends.Services.Local",
+    "StreetLegends.Meta"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
