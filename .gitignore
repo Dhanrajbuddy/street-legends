@@ -58,6 +58,9 @@ crashlytics-build.properties
 *.keystore
 !debug.keystore
 
+# Unity temp build
+/.utmp/
+
 # OS
 .DS_Store
 Thumbs.db
