@@ -7,7 +7,8 @@
     "StreetLegends.Services",
     "StreetLegends.Meta",
     "StreetLegends.Gameplay",
-    "Unity.TextMeshPro"
+    "Unity.TextMeshPro",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
