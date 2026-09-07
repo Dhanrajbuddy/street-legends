@@ -1,5 +1,7 @@
 using UnityEngine;
-using TMPro;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+using StreetLegends.Core;
 using StreetLegends.Gameplay.Match;
 
 namespace StreetLegends.Presentation.Hud
@@ -7,12 +9,13 @@ namespace StreetLegends.Presentation.Hud
     public class MatchHud : MonoBehaviour
     {
         [SerializeField] private MatchController matchController;
-        [SerializeField] private TextMeshProUGUI scoreText;
-        [SerializeField] private TextMeshProUGUI timerText;
-        [SerializeField] private TextMeshProUGUI stateText;
+        [SerializeField] private Text scoreText;
+        [SerializeField] private Text timerText;
+        [SerializeField] private Text stateText;
         [SerializeField] private GameObject resultPanel;
-        [SerializeField] private TextMeshProUGUI resultText;
-        [SerializeField] private UnityEngine.UI.Button restartButton;
+        [SerializeField] private Text resultText;
+        [SerializeField] private Button restartButton;
+        [SerializeField] private Button menuButton;
 
         private void Start()
         {
@@ -28,6 +31,9 @@ namespace StreetLegends.Presentation.Hud
             if (restartButton != null)
                 restartButton.onClick.AddListener(OnRestartClicked);
 
+            if (menuButton != null)
+                menuButton.onClick.AddListener(OnMenuClicked);
+
             if (resultPanel != null)
                 resultPanel.SetActive(false);
         }
@@ -42,6 +48,11 @@ namespace StreetLegends.Presentation.Hud
                 matchController.TimerTick -= OnTimerTick;
                 matchController.MatchFinished -= OnMatchFinished;
             }
+
+            if (restartButton != null)
+                restartButton.onClick.RemoveListener(OnRestartClicked);
+            if (menuButton != null)
+                menuButton.onClick.RemoveListener(OnMenuClicked);
         }
 
         private void OnStateChanged(MatchState state)
@@ -120,6 +131,11 @@ namespace StreetLegends.Presentation.Hud
                 resultPanel.SetActive(false);
 
             matchController?.RestartMatch();
+        }
+
+        private void OnMenuClicked()
+        {
+            SceneManager.LoadScene(SceneNames.MainMenu);
         }
     }
 }

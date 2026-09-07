@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
@@ -26,6 +28,7 @@ namespace StreetLegends.Editor.Setup
         public static void Run()
         {
             CreateDataAssets();
+            BuildMainMenuScene();
             BuildMatchScene();
             Debug.Log("[Phase1Setup] Complete.");
         }
@@ -92,6 +95,38 @@ namespace StreetLegends.Editor.Setup
             AssetDatabase.SaveAssets();
         }
 
+        private static void BuildMainMenuScene()
+        {
+            Scene menuScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var camObj = new GameObject("Main Camera");
+            camObj.tag = "MainCamera";
+            camObj.transform.position = new Vector3(0f, 10f, -10f);
+            camObj.transform.rotation = Quaternion.Euler(60f, 0f, 0f);
+            var cam = camObj.AddComponent<Camera>();
+            camObj.AddComponent<AudioListener>();
+
+            CreateEventSystem();
+
+            var canvasObj = CreateCanvas("MenuCanvas");
+
+            var titleText = CreateText(canvasObj.transform, "TitleText", "STREET LEGENDS", 72);
+            SetAnchors(titleText.rectTransform, AnchorPresets.TopCenter);
+            titleText.rectTransform.anchoredPosition = new Vector2(0f, -120f);
+            titleText.color = Color.yellow;
+            titleText.alignment = TextAnchor.MiddleCenter;
+
+            var playButton = CreateButton(canvasObj.transform, "PlayButton", "PLAY", new Vector2(0f, 0f), new Vector2(300f, 100f));
+            SetAnchors(playButton.GetComponent<RectTransform>(), AnchorPresets.MiddleCenter);
+
+            var controllerObj = new GameObject("MainMenuController");
+            var controller = controllerObj.AddComponent<MainMenuController>();
+            SetPrivateField(controller, "playButton", playButton);
+
+            EditorSceneManager.MarkSceneDirty(menuScene);
+            EditorSceneManager.SaveScene(menuScene, "Assets/_Project/Scenes/MainMenu.unity");
+        }
+
         private static void BuildMatchScene()
         {
             EnsureDirectory(PrefabGameplayPath);
@@ -104,12 +139,20 @@ namespace StreetLegends.Editor.Setup
 
             GameObject courtObj = CreateCourt();
             GameObject ballObj = CreateBall();
-            GameObject playerObj = CreateCharacter("Player", charDef, isPlayer: true);
-            GameObject aiObj = CreateCharacter("AI", charDef, isPlayer: false);
+            TouchInputSource playerInput = null;
+            GameObject playerObj = CreateCharacter("Player", charDef, isPlayer: true, out playerInput);
+            GameObject aiObj = CreateCharacter("AI", charDef, isPlayer: false, out _);
             GameObject cameraObj = CreateCamera();
-            GameObject hudObj = CreateHud();
-            GameObject touchObj = CreateTouchControls();
+
+            CreateEventSystem();
+
+            var canvasObj = CreateCanvas("MatchCanvas");
+            MatchHud hud = CreateHud(canvasObj.transform);
+            TouchControls touchControls = CreateTouchControls(canvasObj.transform, playerInput);
+
             GameObject matchControllerObj = CreateMatchController(matchConfig, aiConfig, courtObj, ballObj, playerObj, aiObj);
+
+            SetPrivateField(hud, "matchController", matchControllerObj.GetComponent<MatchController>());
 
             EditorSceneManager.MarkSceneDirty(matchScene);
             string scenePath = "Assets/_Project/Scenes/Match.unity";
@@ -143,8 +186,8 @@ namespace StreetLegends.Editor.Setup
             CreateWall(go.transform, "WallEast", new Vector3(6f, 1f, 0f), new Vector3(0.5f, 2f, 20f));
             CreateWall(go.transform, "WallWest", new Vector3(-6f, 1f, 0f), new Vector3(0.5f, 2f, 20f));
 
-            var playerGoal = CreateGoal(go.transform, "PlayerGoal", new Vector3(0f, 0.5f, -10f), GoalSide.PlayerGoal);
-            var aiGoal = CreateGoal(go.transform, "AiGoal", new Vector3(0f, 0.5f, 10f), GoalSide.AiGoal);
+            CreateGoal(go.transform, "PlayerGoal", new Vector3(0f, 0.5f, -10f), GoalSide.PlayerGoal);
+            CreateGoal(go.transform, "AiGoal", new Vector3(0f, 0.5f, 10f), GoalSide.AiGoal);
 
             return go;
         }
@@ -168,7 +211,7 @@ namespace StreetLegends.Editor.Setup
             }
         }
 
-        private static GameObject CreateGoal(Transform parent, string name, Vector3 pos, GoalSide side)
+        private static void CreateGoal(Transform parent, string name, Vector3 pos, GoalSide side)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -199,8 +242,7 @@ namespace StreetLegends.Editor.Setup
             var triggerCol = triggerObj.AddComponent<BoxCollider>();
             triggerCol.isTrigger = true;
             var goalTrigger = triggerObj.AddComponent<GoalTrigger>();
-            var sideField = typeof(GoalTrigger).GetField("side", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            sideField?.SetValue(goalTrigger, side);
+            SetPrivateField(goalTrigger, "side", side);
 
             foreach (var r in go.GetComponentsInChildren<Renderer>())
             {
@@ -209,8 +251,6 @@ namespace StreetLegends.Editor.Setup
                     color = Color.white
                 };
             }
-
-            return go;
         }
 
         private static GameObject CreateBall()
@@ -245,8 +285,9 @@ namespace StreetLegends.Editor.Setup
             return go;
         }
 
-        private static GameObject CreateCharacter(string name, CharacterDefinition charDef, bool isPlayer)
+        private static GameObject CreateCharacter(string name, CharacterDefinition charDef, bool isPlayer, out TouchInputSource touchInput)
         {
+            touchInput = null;
             var go = new GameObject(name);
             go.transform.position = isPlayer ? new Vector3(0f, 0f, -5f) : new Vector3(0f, 0f, 5f);
 
@@ -271,24 +312,21 @@ namespace StreetLegends.Editor.Setup
             col.center = new Vector3(0f, 1f, 0f);
 
             var charBehaviour = go.AddComponent<CharacterBehaviour>();
-            var defField = typeof(CharacterBehaviour).GetField("definition", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            defField?.SetValue(charBehaviour, charDef);
+            SetPrivateField(charBehaviour, "definition", charDef);
 
             if (isPlayer)
             {
-                var inputObj = new GameObject("KeyboardInput");
+                var inputObj = new GameObject("TouchInput");
                 inputObj.transform.SetParent(go.transform, false);
-                var keyboardInput = inputObj.AddComponent<KeyboardInputSource>();
-                var inputField = typeof(CharacterBehaviour).GetField("inputSourceBehaviour", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                inputField?.SetValue(charBehaviour, keyboardInput);
+                touchInput = inputObj.AddComponent<TouchInputSource>();
+                SetPrivateField(charBehaviour, "inputSourceBehaviour", touchInput);
             }
             else
             {
                 var inputObj = new GameObject("AiInput");
                 inputObj.transform.SetParent(go.transform, false);
                 var aiInput = inputObj.AddComponent<AiInputSource>();
-                var inputField = typeof(CharacterBehaviour).GetField("inputSourceBehaviour", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                inputField?.SetValue(charBehaviour, aiInput);
+                SetPrivateField(charBehaviour, "inputSourceBehaviour", aiInput);
             }
 
             return go;
@@ -305,28 +343,145 @@ namespace StreetLegends.Editor.Setup
             return go;
         }
 
-        private static GameObject CreateHud()
+        private static void CreateEventSystem()
         {
-            var go = new GameObject("MatchHud");
+            var esObj = new GameObject("EventSystem");
+            esObj.AddComponent<EventSystem>();
+            esObj.AddComponent<StandaloneInputModule>();
+        }
 
-            var canvas = new GameObject("Canvas");
-            canvas.transform.SetParent(go.transform, false);
-            var canvasComponent = canvas.AddComponent<Canvas>();
-            canvasComponent.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.AddComponent<UnityEngine.UI.CanvasScaler>();
-            canvas.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-
-            var hudObj = new GameObject("HudController");
-            hudObj.transform.SetParent(canvas.transform, false);
-            hudObj.AddComponent<MatchHud>();
-
+        private static GameObject CreateCanvas(string name)
+        {
+            var go = new GameObject(name);
+            var canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = go.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.matchWidthOrHeight = 0.5f;
+            go.AddComponent<GraphicRaycaster>();
             return go;
         }
 
-        private static GameObject CreateTouchControls()
+        private static MatchHud CreateHud(Transform canvasTransform)
         {
-            var go = new GameObject("TouchControls");
-            return go;
+            var hudObj = new GameObject("HudController");
+            hudObj.transform.SetParent(canvasTransform, false);
+            var hud = hudObj.AddComponent<MatchHud>();
+
+            var scoreText = CreateText(canvasTransform, "ScoreText", "0 - 0", 56);
+            SetAnchors(scoreText.rectTransform, AnchorPresets.TopCenter);
+            scoreText.rectTransform.anchoredPosition = new Vector2(0f, -20f);
+            scoreText.color = Color.white;
+            scoreText.alignment = TextAnchor.MiddleCenter;
+            SetPrivateField(hud, "scoreText", scoreText);
+
+            var timerText = CreateText(canvasTransform, "TimerText", "2:00", 40);
+            SetAnchors(timerText.rectTransform, AnchorPresets.TopCenter);
+            timerText.rectTransform.anchoredPosition = new Vector2(0f, -80f);
+            timerText.color = Color.white;
+            timerText.alignment = TextAnchor.MiddleCenter;
+            SetPrivateField(hud, "timerText", timerText);
+
+            var stateText = CreateText(canvasTransform, "StateText", "", 80);
+            SetAnchors(stateText.rectTransform, AnchorPresets.MiddleCenter);
+            stateText.color = Color.yellow;
+            stateText.alignment = TextAnchor.MiddleCenter;
+            stateText.gameObject.SetActive(false);
+            SetPrivateField(hud, "stateText", stateText);
+
+            var resultPanel = new GameObject("ResultPanel");
+            resultPanel.transform.SetParent(canvasTransform, false);
+            var panelRect = resultPanel.AddComponent<RectTransform>();
+            SetAnchors(panelRect, AnchorPresets.StretchAll);
+            panelRect.offsetMin = Vector2.zero;
+            panelRect.offsetMax = Vector2.zero;
+            var panelImage = resultPanel.AddComponent<Image>();
+            panelImage.color = new Color(0f, 0f, 0f, 0.7f);
+            SetPrivateField(hud, "resultPanel", resultPanel);
+
+            var resultText = CreateText(resultPanel.transform, "ResultText", "", 64);
+            SetAnchors(resultText.rectTransform, AnchorPresets.TopCenter);
+            resultText.rectTransform.anchoredPosition = new Vector2(0f, -200f);
+            resultText.color = Color.white;
+            resultText.alignment = TextAnchor.MiddleCenter;
+            SetPrivateField(hud, "resultText", resultText);
+
+            var restartBtn = CreateButton(resultPanel.transform, "RestartButton", "RESTART", new Vector2(0f, -50f), new Vector2(300f, 80f));
+            SetAnchors(restartBtn.GetComponent<RectTransform>(), AnchorPresets.MiddleCenter);
+            SetPrivateField(hud, "restartButton", restartBtn);
+
+            var menuBtn = CreateButton(resultPanel.transform, "MenuButton", "MAIN MENU", new Vector2(0f, -160f), new Vector2(300f, 80f));
+            SetAnchors(menuBtn.GetComponent<RectTransform>(), AnchorPresets.MiddleCenter);
+            SetPrivateField(hud, "menuButton", menuBtn);
+
+            resultPanel.SetActive(false);
+
+            return hud;
+        }
+
+        private static TouchControls CreateTouchControls(Transform canvasTransform, TouchInputSource inputSource)
+        {
+            var controlsObj = new GameObject("TouchControls");
+            controlsObj.transform.SetParent(canvasTransform, false);
+            var controls = controlsObj.AddComponent<TouchControls>();
+            SetPrivateField(controls, "inputSource", inputSource);
+
+            var joystickBg = new GameObject("JoystickBackground");
+            joystickBg.transform.SetParent(canvasTransform, false);
+            var bgRect = joystickBg.AddComponent<RectTransform>();
+            SetAnchors(bgRect, AnchorPresets.BottomLeft);
+            bgRect.anchoredPosition = new Vector2(180f, 180f);
+            bgRect.sizeDelta = new Vector2(240f, 240f);
+            var bgImage = joystickBg.AddComponent<Image>();
+            bgImage.color = new Color(1f, 1f, 1f, 0.2f);
+            bgImage.raycastTarget = true;
+
+            var joystickHandle = new GameObject("JoystickHandle");
+            joystickHandle.transform.SetParent(joystickBg.transform, false);
+            var handleRect = joystickHandle.AddComponent<RectTransform>();
+            handleRect.anchoredPosition = Vector2.zero;
+            handleRect.sizeDelta = new Vector2(100f, 100f);
+            var handleImage = joystickHandle.AddComponent<Image>();
+            handleImage.color = new Color(1f, 1f, 1f, 0.5f);
+            handleImage.raycastTarget = false;
+
+            var joystick = joystickBg.AddComponent<VirtualJoystick>();
+            SetPrivateField(joystick, "background", bgRect);
+            SetPrivateField(joystick, "handle", handleRect);
+            SetPrivateField(joystick, "handleRange", 100f);
+            SetPrivateField(controls, "joystick", joystick);
+
+            var kickBtn = CreateButton(canvasTransform, "KickButton", "KICK", new Vector2(-180f, 180f), new Vector2(160f, 160f));
+            SetAnchors(kickBtn.GetComponent<RectTransform>(), AnchorPresets.BottomRight);
+            SetPrivateField(controls, "kickButton", kickBtn);
+
+            var tackleBtn = CreateButton(canvasTransform, "TackleButton", "TACKLE", new Vector2(-180f, 360f), new Vector2(160f, 120f));
+            SetAnchors(tackleBtn.GetComponent<RectTransform>(), AnchorPresets.BottomRight);
+            SetPrivateField(controls, "tackleButton", tackleBtn);
+
+            var sprintObj = new GameObject("SprintButton");
+            sprintObj.transform.SetParent(canvasTransform, false);
+            var sprintRect = sprintObj.AddComponent<RectTransform>();
+            SetAnchors(sprintRect, AnchorPresets.BottomRight);
+            sprintRect.anchoredPosition = new Vector2(-360f, 180f);
+            sprintRect.sizeDelta = new Vector2(140f, 140f);
+            var sprintImage = sprintObj.AddComponent<Image>();
+            sprintImage.color = new Color(0.2f, 0.8f, 0.2f, 0.5f);
+            sprintImage.raycastTarget = true;
+            var sprintBtn = sprintObj.AddComponent<SprintButton>();
+
+            var sprintLabel = CreateText(sprintObj.transform, "SprintLabel", "SPRINT", 24);
+            SetAnchors(sprintLabel.rectTransform, AnchorPresets.StretchAll);
+            sprintLabel.rectTransform.offsetMin = Vector2.zero;
+            sprintLabel.rectTransform.offsetMax = Vector2.zero;
+            sprintLabel.color = Color.white;
+            sprintLabel.alignment = TextAnchor.MiddleCenter;
+            sprintLabel.raycastTarget = false;
+
+            SetPrivateField(controls, "sprintButton", sprintBtn);
+
+            return controls;
         }
 
         private static GameObject CreateMatchController(MatchConfig matchConfig, AiDifficultyConfig aiConfig,
@@ -335,38 +490,117 @@ namespace StreetLegends.Editor.Setup
             var go = new GameObject("MatchController");
             var controller = go.AddComponent<MatchController>();
 
-            var configField = typeof(MatchController).GetField("matchConfig", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            configField?.SetValue(controller, matchConfig);
-
-            var aiConfigField = typeof(MatchController).GetField("aiDifficultyConfig", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            aiConfigField?.SetValue(controller, aiConfig);
-
-            var courtField = typeof(MatchController).GetField("court", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            courtField?.SetValue(controller, court.GetComponent<CourtBehaviour>());
-
-            var ballField = typeof(MatchController).GetField("ball", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            ballField?.SetValue(controller, ball.GetComponent<BallBehaviour>());
-
-            var playerField = typeof(MatchController).GetField("player", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            playerField?.SetValue(controller, player.GetComponent<CharacterBehaviour>());
-
-            var aiField = typeof(MatchController).GetField("ai", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            aiField?.SetValue(controller, ai.GetComponent<CharacterBehaviour>());
+            SetPrivateField(controller, "matchConfig", matchConfig);
+            SetPrivateField(controller, "aiDifficultyConfig", aiConfig);
+            SetPrivateField(controller, "court", court.GetComponent<CourtBehaviour>());
+            SetPrivateField(controller, "ball", ball.GetComponent<BallBehaviour>());
+            SetPrivateField(controller, "player", player.GetComponent<CharacterBehaviour>());
+            SetPrivateField(controller, "ai", ai.GetComponent<CharacterBehaviour>());
 
             var playerGoalTrigger = court.transform.Find("PlayerGoal/GoalTrigger")?.GetComponent<GoalTrigger>();
             var aiGoalTrigger = court.transform.Find("AiGoal/GoalTrigger")?.GetComponent<GoalTrigger>();
 
-            var pgtField = typeof(MatchController).GetField("playerGoalTrigger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            pgtField?.SetValue(controller, playerGoalTrigger);
+            SetPrivateField(controller, "playerGoalTrigger", playerGoalTrigger);
+            SetPrivateField(controller, "aiGoalTrigger", aiGoalTrigger);
 
-            var agtField = typeof(MatchController).GetField("aiGoalTrigger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            agtField?.SetValue(controller, aiGoalTrigger);
+            var aiInput = ai.GetComponentInChildren<AiInputSource>();
+            SetPrivateField(controller, "aiInputSource", aiInput);
 
-            var aiInputField = typeof(MatchController).GetField("aiInputSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            aiInputField?.SetValue(controller, ai.GetComponentInChildren<AiInputSource>());
+            if (aiInput != null)
+            {
+                aiInput.Initialize(aiConfig, ball.GetComponent<BallBehaviour>(), player.GetComponent<CharacterBehaviour>(), court.GetComponent<CourtBehaviour>());
+            }
 
             return go;
         }
+
+        #region UI Helpers
+
+        private enum AnchorPresets
+        {
+            TopLeft, TopCenter, TopRight,
+            MiddleLeft, MiddleCenter, MiddleRight,
+            BottomLeft, BottomCenter, BottomRight,
+            StretchAll
+        }
+
+        private static void SetAnchors(RectTransform rt, AnchorPresets preset)
+        {
+            switch (preset)
+            {
+                case AnchorPresets.TopCenter:
+                    rt.anchorMin = new Vector2(0.5f, 1f); rt.anchorMax = new Vector2(0.5f, 1f);
+                    rt.pivot = new Vector2(0.5f, 1f); break;
+                case AnchorPresets.MiddleCenter:
+                    rt.anchorMin = new Vector2(0.5f, 0.5f); rt.anchorMax = new Vector2(0.5f, 0.5f);
+                    rt.pivot = new Vector2(0.5f, 0.5f); break;
+                case AnchorPresets.BottomLeft:
+                    rt.anchorMin = new Vector2(0f, 0f); rt.anchorMax = new Vector2(0f, 0f);
+                    rt.pivot = new Vector2(0f, 0f); break;
+                case AnchorPresets.BottomRight:
+                    rt.anchorMin = new Vector2(1f, 0f); rt.anchorMax = new Vector2(1f, 0f);
+                    rt.pivot = new Vector2(1f, 0f); break;
+                case AnchorPresets.StretchAll:
+                    rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+                    rt.pivot = new Vector2(0.5f, 0.5f); break;
+                default:
+                    rt.anchorMin = new Vector2(0.5f, 0.5f); rt.anchorMax = new Vector2(0.5f, 0.5f);
+                    rt.pivot = new Vector2(0.5f, 0.5f); break;
+            }
+        }
+
+        private static Text CreateText(Transform parent, string name, string content, int fontSize)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var text = go.AddComponent<Text>();
+            text.text = content;
+            text.fontSize = fontSize;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private static Button CreateButton(Transform parent, string name, string label, Vector2 position, Vector2 size)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var rect = go.AddComponent<RectTransform>();
+            SetAnchors(rect, AnchorPresets.MiddleCenter);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+
+            var image = go.AddComponent<Image>();
+            image.color = new Color(0.2f, 0.4f, 0.8f, 0.6f);
+            image.raycastTarget = true;
+
+            var button = go.AddComponent<Button>();
+            var colors = button.colors;
+            colors.normalColor = new Color(0.2f, 0.4f, 0.8f, 0.6f);
+            colors.highlightedColor = new Color(0.3f, 0.5f, 0.9f, 0.8f);
+            colors.pressedColor = new Color(0.1f, 0.3f, 0.7f, 1f);
+            button.colors = colors;
+
+            var labelObj = new GameObject("Label");
+            labelObj.transform.SetParent(go.transform, false);
+            var labelRect = labelObj.AddComponent<RectTransform>();
+            SetAnchors(labelRect, AnchorPresets.StretchAll);
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            var labelText = labelObj.AddComponent<Text>();
+            labelText.text = label;
+            labelText.fontSize = 32;
+            labelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            labelText.alignment = TextAnchor.MiddleCenter;
+            labelText.color = Color.white;
+            labelText.raycastTarget = false;
+
+            return button;
+        }
+
+        #endregion
 
         private static void RegisterScenesInBuildSettings()
         {
@@ -406,6 +640,12 @@ namespace StreetLegends.Editor.Setup
                 AssetDatabase.CreateAsset(asset, path);
             }
             return asset;
+        }
+
+        private static void SetPrivateField(object obj, string fieldName, object value)
+        {
+            var field = obj.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            field?.SetValue(obj, value);
         }
     }
 }
