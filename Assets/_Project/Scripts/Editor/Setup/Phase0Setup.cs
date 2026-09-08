@@ -7,6 +7,7 @@ using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace StreetLegends.Editor.Setup
@@ -21,6 +22,9 @@ namespace StreetLegends.Editor.Setup
         private const string ScenesDir = ProjectRoot + "/Scenes";
         private const string EnvDir = ProjectRoot + "/Data/Environment";
         private const string DevEnvPath = EnvDir + "/EnvironmentConfig_Dev.asset";
+        private const string RenderingDir = ProjectRoot + "/Settings/Rendering";
+        public const string UrpAssetPath = RenderingDir + "/URP-Asset.asset";
+        public const string UrpRendererPath = RenderingDir + "/URP-Renderer.asset";
 
         private static readonly string[] Folders =
         {
@@ -49,8 +53,10 @@ namespace StreetLegends.Editor.Setup
         {
             CreateFolders();
             ApplyProjectSettings();
-            EnvironmentConfig devEnv = CreateEnvironmentConfig();
-            CreateScenes(devEnv);
+            EnsureTags();
+            EnsureRenderPipeline();
+            CreateEnvironmentConfig();
+            CreateScenes();
             RegisterScenesInBuildSettings();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -108,32 +114,129 @@ namespace StreetLegends.Editor.Setup
             Time.fixedDeltaTime = 0.02f;
         }
 
-        private static EnvironmentConfig CreateEnvironmentConfig()
+        public static readonly string[] RequiredTags = { "Ball" };
+
+        public static void EnsureTags()
         {
-            var existing = AssetDatabase.LoadAssetAtPath<EnvironmentConfig>(DevEnvPath);
-            if (existing != null)
+            Object[] assets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (assets == null || assets.Length == 0) return;
+
+            var so = new SerializedObject(assets[0]);
+            SerializedProperty tags = so.FindProperty("tags");
+            foreach (string tag in RequiredTags)
             {
-                return existing;
+                bool exists = false;
+                for (int i = 0; i < tags.arraySize; i++)
+                {
+                    if (tags.GetArrayElementAtIndex(i).stringValue == tag) { exists = true; break; }
+                }
+                if (!exists)
+                {
+                    tags.InsertArrayElementAtIndex(tags.arraySize);
+                    tags.GetArrayElementAtIndex(tags.arraySize - 1).stringValue = tag;
+                }
+            }
+            so.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>
+        /// URP requires a ScriptableRendererData on the pipeline asset. Without it the build-time shader
+        /// stripper removes every URP/UI shader variant and the device renders magenta. This is idempotent
+        /// and repairs an existing pipeline asset that has an empty renderer list.
+        /// </summary>
+        public static void EnsureRenderPipeline()
+        {
+            var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(UrpRendererPath);
+            if (renderer == null)
+            {
+                renderer = ScriptableObject.CreateInstance<UniversalRendererData>();
+                AssetDatabase.CreateAsset(renderer, UrpRendererPath);
+                ResourceReloader.ReloadAllNullIn(renderer, UniversalRenderPipelineAsset.packagePath);
+                EditorUtility.SetDirty(renderer);
+            }
+
+            var pipeline = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(UrpAssetPath);
+            if (pipeline == null)
+            {
+                pipeline = UniversalRenderPipelineAsset.Create(renderer);
+                AssetDatabase.CreateAsset(pipeline, UrpAssetPath);
+            }
+            else
+            {
+                var so = new SerializedObject(pipeline);
+                SerializedProperty list = so.FindProperty("m_RendererDataList");
+                list.arraySize = 1;
+                list.GetArrayElementAtIndex(0).objectReferenceValue = renderer;
+                so.FindProperty("m_DefaultRendererIndex").intValue = 0;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                ResourceReloader.ReloadAllNullIn(pipeline, UniversalRenderPipelineAsset.packagePath);
+                EditorUtility.SetDirty(pipeline);
+            }
+
+            GraphicsSettings.defaultRenderPipeline = pipeline;
+
+            int previous = QualitySettings.GetQualityLevel();
+            for (int i = 0; i < QualitySettings.names.Length; i++)
+            {
+                QualitySettings.SetQualityLevel(i, false);
+                QualitySettings.renderPipeline = pipeline;
+            }
+            QualitySettings.SetQualityLevel(previous, false);
+
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void CreateEnvironmentConfig()
+        {
+            if (AssetDatabase.LoadAssetAtPath<EnvironmentConfig>(DevEnvPath) != null)
+            {
+                return;
             }
 
             var config = ScriptableObject.CreateInstance<EnvironmentConfig>();
             AssetDatabase.CreateAsset(config, DevEnvPath);
-            return config;
+            AssetDatabase.SaveAssets();
         }
 
-        private static void CreateScenes(EnvironmentConfig devEnv)
+        private static void CreateScenes()
         {
             string bootPath = $"{ScenesDir}/{SceneNames.Boot}.unity";
-            if (!File.Exists(bootPath))
+            Scene boot;
+            GameBootstrap bootstrap;
+            if (File.Exists(bootPath))
             {
-                Scene boot = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-                var go = new GameObject("GameBootstrap");
-                var bootstrap = go.AddComponent<GameBootstrap>();
-                var so = new SerializedObject(bootstrap);
-                so.FindProperty("_environment").objectReferenceValue = devEnv;
-                so.ApplyModifiedPropertiesWithoutUndo();
-                EditorSceneManager.SaveScene(boot, bootPath);
+                boot = EditorSceneManager.OpenScene(bootPath, OpenSceneMode.Single);
+                bootstrap = Object.FindFirstObjectByType<GameBootstrap>();
+                if (bootstrap == null)
+                {
+                    bootstrap = new GameObject("GameBootstrap").AddComponent<GameBootstrap>();
+                }
             }
+            else
+            {
+                boot = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                bootstrap = new GameObject("GameBootstrap").AddComponent<GameBootstrap>();
+            }
+
+            // Load after the scene switch: scene loading can unload asset references held before it.
+            var devEnv = AssetDatabase.LoadAssetAtPath<EnvironmentConfig>(DevEnvPath);
+            if (devEnv == null)
+            {
+                throw new System.InvalidOperationException($"[Phase0Setup] EnvironmentConfig missing at {DevEnvPath}");
+            }
+
+            var so = new SerializedObject(bootstrap);
+            so.FindProperty("_environment").objectReferenceValue = devEnv;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            so.Update();
+            if (so.FindProperty("_environment").objectReferenceValue == null)
+            {
+                throw new System.InvalidOperationException("[Phase0Setup] Failed to assign EnvironmentConfig to GameBootstrap.");
+            }
+
+            EditorSceneManager.MarkSceneDirty(boot);
+            EditorSceneManager.SaveScene(boot, bootPath);
 
             CreateDefaultSceneIfMissing($"{ScenesDir}/{SceneNames.MainMenu}.unity");
             CreateDefaultSceneIfMissing($"{ScenesDir}/{SceneNames.Match}.unity");

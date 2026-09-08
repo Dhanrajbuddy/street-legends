@@ -9,7 +9,8 @@
     "StreetLegends.Services",
     "StreetLegends.Meta",
     "StreetLegends.Gameplay",
-    "StreetLegends.Presentation"
+    "StreetLegends.Presentation",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

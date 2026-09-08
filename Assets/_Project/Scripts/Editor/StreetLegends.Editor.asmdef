@@ -9,7 +9,9 @@
     "StreetLegends.Meta",
     "StreetLegends.Gameplay",
     "StreetLegends.Presentation",
-    "StreetLegends.Bootstrap"
+    "StreetLegends.Bootstrap",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
   ],
   "includePlatforms": [
     "Editor"

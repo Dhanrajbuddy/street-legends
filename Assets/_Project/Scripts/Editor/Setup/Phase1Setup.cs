@@ -27,6 +27,7 @@ namespace StreetLegends.Editor.Setup
         [MenuItem("Street Legends/Phase 1/Setup Match Scene")]
         public static void Run()
         {
+            Phase0Setup.EnsureRenderPipeline();
             CreateDataAssets();
             BuildMainMenuScene();
             BuildMatchScene();
@@ -143,6 +144,7 @@ namespace StreetLegends.Editor.Setup
             GameObject playerObj = CreateCharacter("Player", charDef, isPlayer: true, out playerInput);
             GameObject aiObj = CreateCharacter("AI", charDef, isPlayer: false, out _);
             GameObject cameraObj = CreateCamera();
+            CreateDirectionalLight();
 
             CreateEventSystem();
 
@@ -341,6 +343,17 @@ namespace StreetLegends.Editor.Setup
             go.AddComponent<Camera>();
             go.AddComponent<AudioListener>();
             return go;
+        }
+
+        private static void CreateDirectionalLight()
+        {
+            var go = new GameObject("Directional Light");
+            go.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            var light = go.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.intensity = 1.2f;
+            light.color = Color.white;
+            light.shadows = LightShadows.Soft;
         }
 
         private static void CreateEventSystem()

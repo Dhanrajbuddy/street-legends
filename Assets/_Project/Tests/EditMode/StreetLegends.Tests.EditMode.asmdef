@@ -9,7 +9,8 @@
     "StreetLegends.Services",
     "StreetLegends.Services.Local",
     "StreetLegends.Meta",
-    "StreetLegends.Gameplay"
+    "StreetLegends.Gameplay",
+    "StreetLegends.Editor"
   ],
   "includePlatforms": [
     "Editor"
